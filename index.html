@@ -7,7 +7,12 @@
 <meta name="description" content="Qwen3.8-Flash-Next IQ3_S (125B MoE) served at home from an HP Z440 with one RTX 3060 and two Tesla M10 cards. Measured results, the hardware, the story and how to rebuild it. By Craicek.">
 <meta property="og:title" content="AIDROGEN — a 125B model on a used workstation">
 <meta property="og:description" content="One RTX 3060 and two decade-old Tesla M10 cards serve a 125B MoE at 54 tokens per second with 128k context. Measured, documented, reproducible.">
-<meta property="og:image" content="assets/rig.jpg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bitmakerman.github.io/aidrogen/">
+<meta property="og:image" content="https://bitmakerman.github.io/aidrogen/assets/rig.jpg">
+<meta property="og:image:width" content="1600">
+<meta property="og:image:height" content="931">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 4h16v6H10v10H4z' fill='%23FF6A13'/%3E%3Cpath d='M28 28H12v-6h10V12h6z' fill='%231F2529'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -146,6 +151,13 @@
   .verdict { font-weight: 600; white-space: nowrap; }
   .credits { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
   .credits li { max-width: var(--text); }
+
+  .learn { background: var(--graphite); color: #E8ECEF; border-radius: 6px; padding: 48px; }
+  .learn h2, .learn .lead { color: #fff; }
+  .learn a { color: #fff; }
+  .learn .cta { display: inline-block; margin-top: 8px; background: var(--orange); color: #1F2529; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 4px; }
+  .learn .cta:hover { background: #fff; color: #1F2529; }
+  @media (max-width: 600px) { .learn { padding: 28px 22px; } }
 
   footer { margin-top: 112px; background: var(--graphite); color: #DDE2E6; padding: 40px 0 48px; font-size: 16px; }
   footer a { color: #fff; }
@@ -466,6 +478,16 @@
     </ol>
   </section>
 
+  <section id="learn">
+    <div class="learn bracket">
+      <h2>Want to learn to build this?</h2>
+      <p class="lead">Running a large model at home is a chain of skills: choosing hardware, reading a datasheet, driving a coding agent, measuring instead of guessing. None of them is magic, and all of them can be learned.</p>
+      <p>The <a href="https://www.rizzoaiacademy.com/">Rizzo AI Academy</a>, led by Simone Rizzo, teaches them with courses, weekly live sessions and a community of people building with AI: language models, local AI with tools like Ollama and LM Studio, agents, coding agents and more. The courses are in Italian.</p>
+      <p>Full disclosure: I am a moderator and contributor there. If this page made you want to try, that is where to start.</p>
+      <p><a class="cta" href="https://www.rizzoaiacademy.com/">Visit the Rizzo AI Academy</a></p>
+    </div>
+  </section>
+
   <section id="credits">
     <h2>Credits</h2>
     <div class="two">
@@ -489,6 +511,7 @@
     <div>
       <p><strong>AIDROGEN</strong>, built and measured by <a href="https://github.com/BitMakerMan">Craicek</a>.</p>
       <p>Last measured on 8 November 2026.</p>
+      <p>Learn this at the <a href="https://www.rizzoaiacademy.com/">Rizzo AI Academy</a>.</p>
     </div>
     <div>
       <p><a href="https://github.com/BitMakerMan/Strata-maxwell/tree/iq3">Source code</a></p>
