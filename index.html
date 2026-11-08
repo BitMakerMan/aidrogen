@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIDROGEN — a 125B model on a used workstation</title>
+<meta name="description" content="Qwen3.8-Flash-Next IQ3_S (125B MoE) served at home from an HP Z440 with one RTX 3060 and two Tesla M10 cards. Measured results, the hardware, the story and how to rebuild it. By Craicek.">
+<meta property="og:title" content="AIDROGEN — a 125B model on a used workstation">
+<meta property="og:description" content="One RTX 3060 and two decade-old Tesla M10 cards serve a 125B MoE at 54 tokens per second with 128k context. Measured, documented, reproducible.">
+<meta property="og:image" content="assets/rig.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 4h16v6H10v10H4z' fill='%23FF6A13'/%3E%3Cpath d='M28 28H12v-6h10V12h6z' fill='%231F2529'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --alu: #E4E7EA;        /* page: brushed aluminium */
+    --panel: #F7F8F9;      /* raised surfaces */
+    --graphite: #1F2529;   /* text */
+    --steel: #56616B;      /* secondary text */
+    --line: #C6CCD2;       /* rules, borders */
+    --orange: #FF6A13;     /* the printed frame */
+    --orange-ink: #B8440A; /* orange that passes contrast as text */
+    --blue: #2B6FD6;       /* the network cable: IQ2_XS series */
+    --max: 1120px;
+    --text: 68ch;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--alu);
+    color: var(--graphite);
+    font-family: "Barlow", system-ui, sans-serif;
+    font-size: 18px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--graphite); text-decoration-color: var(--orange); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  a:hover { color: var(--orange-ink); }
+  :focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .86em; background: var(--panel); border: 1px solid var(--line); padding: .05em .35em; border-radius: 3px; }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+  @media (max-width: 600px) { .wrap { padding: 0 16px; } body { font-size: 17px; } }
+
+  h1, h2, h3 { font-family: "Barlow Condensed", "Barlow", sans-serif; font-weight: 700; line-height: 1.05; letter-spacing: .005em; margin: 0; }
+  h2 { font-size: clamp(34px, 5vw, 52px); margin-bottom: 18px; }
+  h3 { font-size: 26px; margin-bottom: 8px; }
+  p { margin: 0 0 1em; max-width: var(--text); }
+  .lead { font-size: 21px; line-height: 1.5; color: var(--graphite); }
+  .muted { color: var(--steel); }
+
+  /* The signature: corner brackets, like the frame's printed corners */
+  .bracket { position: relative; }
+  .bracket::before, .bracket::after {
+    content: ""; position: absolute; width: 44px; height: 44px; pointer-events: none;
+    border: 0 solid var(--orange);
+  }
+  .bracket::before { top: -10px; left: -10px; border-top-width: 10px; border-left-width: 10px; }
+  .bracket::after { bottom: -10px; right: -10px; border-bottom-width: 10px; border-right-width: 10px; }
+  @media (max-width: 600px) { .bracket::before, .bracket::after { width: 28px; height: 28px; } .bracket::before { top: -6px; left: -6px; border-top-width: 6px; border-left-width: 6px; } .bracket::after { bottom: -6px; right: -6px; border-bottom-width: 6px; border-right-width: 6px; } }
+
+  /* Top bar */
+  .top { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; gap: 16px; flex-wrap: wrap; }
+  .mark { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 24px; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+  .mark svg { width: 22px; height: 22px; }
+  .top nav { display: flex; gap: 20px; flex-wrap: wrap; font-weight: 500; font-size: 16px; }
+  .top nav a { text-decoration: none; }
+  .top nav a:hover { text-decoration: underline; text-decoration-color: var(--orange); }
+
+  /* Hero */
+  .hero { padding: 40px 0 0; }
+  .hero-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 48px; align-items: end; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; gap: 32px; } }
+  .hero h1 { font-size: clamp(64px, 11vw, 136px); line-height: .88; letter-spacing: -.01em; }
+  .hero .sub { font-family: "Barlow Condensed", sans-serif; font-weight: 600; font-size: clamp(26px, 3.4vw, 38px); line-height: 1.1; margin: 16px 0 20px; max-width: 22ch; }
+  .byline { font-size: 16px; color: var(--steel); }
+  .byline a { font-weight: 600; }
+
+  /* Rating plate: styled like the label on a power supply */
+  .plate { background: var(--panel); border: 2px solid var(--graphite); border-radius: 6px; padding: 0; font-size: 15px; }
+  .plate-head { display: flex; flex-wrap: wrap; column-gap: 12px; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--graphite); padding: 10px 16px; }
+  .plate-head strong { font-family: "Barlow Condensed", sans-serif; font-size: 22px; }
+  .plate-head span { color: var(--steel); }
+  .plate dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; }
+  .plate div { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .plate div:nth-child(odd) { border-right: 1px solid var(--line); }
+  .plate div:nth-last-child(-n+2) { border-bottom: 0; }
+  .plate dt { color: var(--steel); font-size: 14px; }
+  .plate dd { margin: 0; font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 28px; line-height: 1.1; }
+  .plate dd small { display: block; font-family: "Barlow", sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; color: var(--steel); }
+
+  .photo { margin: 56px 0 0; }
+  .photo-frame { position: relative; }
+  .photo-frame img { display: block; width: 100%; height: auto; border-radius: 4px; }
+  .pin { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--orange); color: #1F2529; font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 18px; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  @media (max-width: 600px) { .pin { width: 22px; height: 22px; margin: -11px 0 0 -11px; font-size: 14px; border-width: 1.5px; } }
+  .legend { list-style: none; padding: 0; margin: 20px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 24px; font-size: 16px; }
+  .legend li { display: flex; gap: 10px; align-items: baseline; }
+  .legend b { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--orange); font-family: "Barlow Condensed", sans-serif; display: grid; place-items: center; font-size: 15px; }
+
+  /* Sections */
+  section { padding: 96px 0 0; }
+  @media (max-width: 600px) { section { padding-top: 72px; } }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  @media (max-width: 900px) { .two { grid-template-columns: 1fr; gap: 24px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 24px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 16px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--steel); font-size: 15px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .table-wrap table tr:last-child td { border-bottom: 0; }
+
+  figure { margin: 0; }
+  figcaption { font-size: 15px; color: var(--steel); margin-top: 12px; max-width: var(--text); }
+  .diagram { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; overflow-x: auto; }
+  .diagram svg { display: block; width: 100%; min-width: 680px; height: auto; }
+
+  /* Results chart */
+  .chart svg { display: block; width: 100%; height: auto; }
+  .key { display: flex; gap: 20px; flex-wrap: wrap; font-size: 15px; margin: 0 0 12px; }
+  .key span { display: inline-flex; align-items: center; gap: 8px; }
+  .key i { width: 14px; height: 14px; border-radius: 2px; display: inline-block; }
+
+  /* Timeline: a real sequence, so it is numbered by date */
+  .timeline { list-style: none; margin: 0; padding: 0; border-left: 4px solid var(--graphite); }
+  .timeline li { position: relative; padding: 0 0 32px 28px; }
+  .timeline li::before { content: ""; position: absolute; left: -12px; top: 6px; width: 20px; height: 20px; background: var(--alu); border: 4px solid var(--graphite); border-radius: 50%; }
+  .timeline li.hit::before { background: var(--orange); border-color: var(--orange); }
+  .timeline time { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 22px; display: block; }
+  .timeline h3 { font-family: "Barlow", sans-serif; font-weight: 600; font-size: 19px; margin: 2px 0 6px; line-height: 1.3; }
+  .timeline p { margin: 0; }
+
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .steps li { counter-increment: step; display: grid; grid-template-columns: 48px 1fr; gap: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; }
+  .steps li::before { content: counter(step); font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 34px; line-height: 1; color: var(--orange-ink); }
+  .steps h3 { font-family: "Barlow", sans-serif; font-weight: 600; font-size: 19px; line-height: 1.3; margin-bottom: 4px; }
+  .steps p { margin: 0; }
+
+  .verdict { font-weight: 600; white-space: nowrap; }
+  .credits { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  .credits li { max-width: var(--text); }
+
+  footer { margin-top: 112px; background: var(--graphite); color: #DDE2E6; padding: 40px 0 48px; font-size: 16px; }
+  footer a { color: #fff; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  footer p { margin: 0 0 6px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 4h16v6H10v10H4z" fill="#FF6A13"/><path d="M28 28H12v-6h10V12h6z" fill="#1F2529"/></svg>
+      AIDROGEN
+    </a>
+    <nav aria-label="Sections">
+      <a href="#machine">The machine</a>
+      <a href="#results">Results</a>
+      <a href="#story">Story</a>
+      <a href="#rebuild">Rebuild it</a>
+      <a href="https://github.com/BitMakerMan/Strata-maxwell/tree/iq3">Code</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="hero-grid">
+      <div>
+        <h1>AIDROGEN</h1>
+        <p class="sub">A 125-billion-parameter model, served at home from a used workstation.</p>
+        <p class="lead">One RTX 3060 and two Tesla M10 cards, cards that data centres retired years ago, run Qwen3.8-Flash-Next at its best-quality quantization, with 128k tokens of context. Every number on this page was measured on the machine in the photo.</p>
+        <p class="byline">Built by <a href="https://github.com/BitMakerMan">Craicek</a>. In production since 8 November 2026.</p>
+      </div>
+      <aside class="plate" aria-label="Key figures">
+        <div class="plate-head"><strong>aidrogen</strong><span>HP Z440, measured 8 Nov 2026</span></div>
+        <dl>
+          <div><dt>Model</dt><dd>125B <small>MoE, 6B active</small></dd></div>
+          <div><dt>Quantization</dt><dd>IQ3_S</dd></div>
+          <div><dt>Speed, coding prompts</dt><dd>54.3 <small>tok/s</small></dd></div>
+          <div><dt>Context, verified</dt><dd>128k <small>tokens</small></dd></div>
+          <div><dt>GPUs</dt><dd>1 + 8 <small>3060 + M10 dies</small></dd></div>
+          <div><dt>Video memory</dt><dd>76 GB <small>12 + 8 × 8</small></dd></div>
+        </dl>
+      </aside>
+    </div>
+
+    <figure class="photo">
+      <div class="photo-frame bracket">
+        <img src="assets/rig.jpg" width="1600" height="931" alt="The aidrogen rig: an open aluminium frame with orange 3D-printed parts. Three graphics cards sit in printed cradles along the top, the motherboard with its CPU cooler lies on the bottom, and the power supply stands on the left.">
+        <span class="pin" style="left:38%;top:20%" aria-hidden="true">1</span>
+        <span class="pin" style="left:58%;top:20%" aria-hidden="true">2</span>
+        <span class="pin" style="left:80%;top:44%" aria-hidden="true">3</span>
+        <span class="pin" style="left:17%;top:46%" aria-hidden="true">4</span>
+        <span class="pin" style="left:40%;top:62%" aria-hidden="true">5</span>
+        <span class="pin" style="left:58%;top:76%" aria-hidden="true">6</span>
+        <span class="pin" style="left:94%;top:11%" aria-hidden="true">7</span>
+      </div>
+      <ol class="legend" aria-label="What is in the photo">
+        <li><b>1</b>RTX 3060 12 GB: runs the shared layers and holds the busiest experts</li>
+        <li><b>2</b>Tesla M10, first card: four GPUs of 8 GB</li>
+        <li><b>3</b>Tesla M10, second card: four more GPUs of 8 GB</li>
+        <li><b>4</b>HP Z440 power supply</li>
+        <li><b>5</b>Xeon E5-1620 v4 under its cooler</li>
+        <li><b>6</b>NVMe SSD on a PCIe adapter</li>
+        <li><b>7</b>Open frame: aluminium profiles and 3D-printed parts</li>
+      </ol>
+    </figure>
+  </div>
+
+  <section id="what">
+    <div class="two">
+      <div>
+        <h2>What runs here</h2>
+        <p><strong>Qwen3.8-Flash-Next</strong> is a mixture-of-experts model: 125 billion parameters in total, but only about 6 billion are used for each token. Most of the weight sits in 24,576 small "experts", and every token calls just a few of them.</p>
+        <p>That is what makes cheap hardware useful. The experts do not need a fast GPU; they need a lot of memory close to a GPU. A Tesla M10 is four small GPUs on one card, 8 GB each, built for virtual desktops and now sold off by data centres. Two of them give 64 GB of video memory, enough to hold the whole model next to the RTX 3060.</p>
+      </div>
+      <div>
+        <h2>What was built</h2>
+        <p>The engine is <a href="https://github.com/Niko1221/Strata">Strata</a>, with the Maxwell support of <a href="https://github.com/nuke1984/Strata-maxwell">Strata-maxwell</a>. That fork drove up to four M10 GPUs and only 2-bit expert formats.</p>
+        <p>This project extends it to <strong>eight M10 GPUs</strong> and adds the kernels the M10 was missing for the <strong>IQ3_S</strong> model: three new input formats and a new output stage, rewritten so the old cards read memory efficiently. Each new kernel was checked against the RTX 3060's own results before it was allowed to run.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="machine">
+    <h2>The machine</h2>
+    <p class="lead">Nothing here is new hardware. Only the frame is custom.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Part</th><th>What it is</th><th>Its job</th></tr></thead>
+        <tbody>
+          <tr><td>Workstation</td><td>HP Z440, Xeon E5-1620 v4 (4 cores, 8 threads)</td><td>Host. The CPU runs the server and feeds the GPUs.</td></tr>
+          <tr><td>Main GPU</td><td>NVIDIA RTX 3060 12 GB, slot 2, PCIe Gen3 x16</td><td>Attention and shared layers, the speculative draft head, and a cache of the 1,267 busiest experts.</td></tr>
+          <tr><td>Expert GPUs</td><td>2 × NVIDIA Tesla M10 (4 × GM107, 8 GB each), slots 4 and 5</td><td>The other 23,309 experts, split across eight dies.</td></tr>
+          <tr><td>Fast storage</td><td>NVMe SSD (Samsung SM951/PM951), slot 3</td><td>The IQ3_S model and its prepared pack. Loads in about 4 minutes.</td></tr>
+          <tr><td>Archive storage</td><td>1 TB hard disk</td><td>The IQ2_XS model and the full system backup.</td></tr>
+          <tr><td>Power limits</td><td>RTX 3060 at 120 W, each M10 die at 30 W</td><td>Measured: more power to the 3060 gave a higher clock and no extra speed.</td></tr>
+          <tr><td>Frame</td><td>Aluminium profiles, 3D-printed cradles and corners, PCIe riser cables</td><td>Holds three double-width cards that the Z440 case cannot.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:48px">How the cards are wired</h3>
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 1040 400" role="img" aria-labelledby="topo-t topo-d">
+          <title id="topo-t">PCIe topology of the rig</title>
+          <desc id="topo-d">The CPU connects to the RTX 3060 in slot 2 at Gen3 x16, to the NVMe SSD in slot 3, and to the two Tesla M10 cards in slots 4 and 5. Each M10 has a PLX switch: the switch links to its four GPUs at Gen3 x8 but to the host only at Gen1, x8 in slot 4 and x16 in slot 5.</desc>
+          <style>
+            .bx { fill: #F7F8F9; stroke: #1F2529; stroke-width: 2; }
+            .bxo { fill: #FFE7D6; stroke: #FF6A13; stroke-width: 2.5; }
+            .t { font: 600 17px Barlow, sans-serif; fill: #1F2529; }
+            .s { font: 400 14px Barlow, sans-serif; fill: #56616B; }
+            .l { stroke: #1F2529; stroke-width: 2.5; fill: none; }
+            .slow { stroke: #FF6A13; stroke-width: 4; stroke-dasharray: 8 6; fill: none; }
+            .lab { font: 600 14px Barlow, sans-serif; fill: #1F2529; }
+            .labo { font: 600 14px Barlow, sans-serif; fill: #B8440A; }
+          </style>
+          <rect class="bx" x="400" y="10" width="240" height="56" rx="6"/>
+          <text class="t" x="520" y="36" text-anchor="middle">Xeon E5-1620 v4</text>
+          <text class="s" x="520" y="56" text-anchor="middle">PCIe root complex</text>
+
+          <path class="l" d="M440 66 V120 H120 V150"/>
+          <path class="l" d="M480 66 V110 H360 V150"/>
+          <path class="slow" d="M560 66 V110 H640 V150"/>
+          <path class="slow" d="M600 66 V100 H880 V150"/>
+
+          <text class="lab" x="128" y="140">slot 2 · Gen3 x16 · 12.05 GB/s</text>
+          <text class="lab" x="368" y="140">slot 3</text>
+          <text class="labo" x="648" y="140">slot 4 · Gen1 x8 · 1.58 GB/s</text>
+          <text class="labo" x="888" y="128">slot 5 · Gen1 x16</text>
+          <text class="labo" x="888" y="144">3.14 GB/s</text>
+
+          <rect class="bx" x="30" y="150" width="180" height="70" rx="6"/>
+          <text class="t" x="120" y="180" text-anchor="middle">RTX 3060 12 GB</text>
+          <text class="s" x="120" y="202" text-anchor="middle">CUDA0 · bus 07:00.0</text>
+
+          <rect class="bx" x="280" y="150" width="160" height="70" rx="6"/>
+          <text class="t" x="360" y="180" text-anchor="middle">NVMe SSD</text>
+          <text class="s" x="360" y="202" text-anchor="middle">model files</text>
+
+          <rect class="bxo" x="540" y="150" width="200" height="56" rx="6"/>
+          <text class="t" x="640" y="176" text-anchor="middle">Tesla M10 · PLX switch</text>
+          <text class="s" x="640" y="196" text-anchor="middle">bus 01:00.0</text>
+
+          <rect class="bxo" x="780" y="150" width="200" height="56" rx="6"/>
+          <text class="t" x="880" y="176" text-anchor="middle">Tesla M10 · PLX switch</text>
+          <text class="s" x="880" y="196" text-anchor="middle">bus 08:00.0</text>
+
+          <path class="l" d="M640 206 V238 M562 238 H718 M562 238 V270 M614 238 V270 M666 238 V270 M718 238 V270"/>
+          <path class="l" d="M880 206 V238 M802 238 H958 M802 238 V270 M854 238 V270 M906 238 V270 M958 238 V270"/>
+          <rect class="bx" x="540" y="270" width="44" height="34" rx="4"/><text class="t" x="562" y="293" text-anchor="middle">1</text>
+          <rect class="bx" x="592" y="270" width="44" height="34" rx="4"/><text class="t" x="614" y="293" text-anchor="middle">2</text>
+          <rect class="bx" x="644" y="270" width="44" height="34" rx="4"/><text class="t" x="666" y="293" text-anchor="middle">3</text>
+          <rect class="bx" x="696" y="270" width="44" height="34" rx="4"/><text class="t" x="718" y="293" text-anchor="middle">4</text>
+          <rect class="bx" x="780" y="270" width="44" height="34" rx="4"/><text class="t" x="802" y="293" text-anchor="middle">5</text>
+          <rect class="bx" x="832" y="270" width="44" height="34" rx="4"/><text class="t" x="854" y="293" text-anchor="middle">6</text>
+          <rect class="bx" x="884" y="270" width="44" height="34" rx="4"/><text class="t" x="906" y="293" text-anchor="middle">7</text>
+          <rect class="bx" x="936" y="270" width="44" height="34" rx="4"/><text class="t" x="958" y="293" text-anchor="middle">8</text>
+          <text class="s" x="640" y="328" text-anchor="middle">CUDA1–4 · buses 03–06</text>
+          <text class="s" x="640" y="346" text-anchor="middle">8 GB each</text>
+          <text class="s" x="880" y="328" text-anchor="middle">CUDA5–8 · buses 0A–0D</text>
+          <text class="s" x="880" y="346" text-anchor="middle">8 GB each</text>
+          <text class="s" x="760" y="384" text-anchor="middle">Each die links to its switch at Gen3 x8; the four dies share the switch's uplink.</text>
+        </svg>
+      </div>
+      <figcaption>Measured on the rig. The M10 slots are forced to PCIe Gen1 in the BIOS on purpose: at Gen3, with an NVMe drive next to an unshielded riser, the link produced about 10,500 correctable errors per second. Gen1 took that to zero.</figcaption>
+    </figure>
+  </section>
+
+  <section id="results">
+    <h2>Results</h2>
+    <p class="lead">IQ3_S, the best-quality quantization, is about 10% slower than the 2-bit IQ2_XS. On a coding agent that trade is worth it: fewer wrong answers mean fewer rounds of corrections.</p>
+
+    <div class="two">
+      <figure class="chart">
+        <div class="key" aria-hidden="true">
+          <span><i style="background:var(--blue)"></i>IQ2_XS, 2-bit</span>
+          <span><i style="background:var(--orange)"></i>IQ3_S, best quality</span>
+        </div>
+        <svg viewBox="0 0 520 300" role="img" aria-labelledby="ch-t ch-d">
+          <title id="ch-t">Generation speed in tokens per second</title>
+          <desc id="ch-d">City prompt: IQ2_XS 56.6, IQ3_S 51.3. Code prompt: IQ2_XS 64.0, IQ3_S 57.3. Mean of six runs: IQ2_XS 60.3, IQ3_S 54.3.</desc>
+          <style>
+            .ax { stroke: #C6CCD2; stroke-width: 1; }
+            .cat { font: 600 16px Barlow, sans-serif; fill: #1F2529; }
+            .val { font: 600 15px Barlow, sans-serif; fill: #1F2529; }
+            .tick { font: 400 13px Barlow, sans-serif; fill: #56616B; }
+          </style>
+          <!-- scale: 0..70 tok/s over x 110..490 (380 px) -->
+          <line class="ax" x1="110" y1="10" x2="110" y2="262"/>
+          <line class="ax" x1="218.6" y1="10" x2="218.6" y2="262"/>
+          <line class="ax" x1="327.1" y1="10" x2="327.1" y2="262"/>
+          <line class="ax" x1="435.7" y1="10" x2="435.7" y2="262"/>
+          <text class="tick" x="110" y="282" text-anchor="middle">0</text>
+          <text class="tick" x="218.6" y="282" text-anchor="middle">20</text>
+          <text class="tick" x="327.1" y="282" text-anchor="middle">40</text>
+          <text class="tick" x="435.7" y="282" text-anchor="middle">60 tok/s</text>
+
+          <text class="cat" x="0" y="52">City</text>
+          <rect x="110" y="22" width="307.3" height="26" fill="#2B6FD6"/><text class="val" x="423" y="41">56.6</text>
+          <rect x="110" y="50" width="278.5" height="26" fill="#FF6A13"/><text class="val" x="394" y="69">51.3</text>
+
+          <text class="cat" x="0" y="132">Code</text>
+          <rect x="110" y="102" width="347.3" height="26" fill="#2B6FD6"/><text class="val" x="463" y="121">64.0</text>
+          <rect x="110" y="130" width="311.1" height="26" fill="#FF6A13"/><text class="val" x="427" y="149">57.3</text>
+
+          <text class="cat" x="0" y="212">Mean</text>
+          <rect x="110" y="182" width="327.2" height="26" fill="#2B6FD6"/><text class="val" x="443" y="201">60.3</text>
+          <rect x="110" y="210" width="294.8" height="26" fill="#FF6A13"/><text class="val" x="411" y="229">54.3</text>
+        </svg>
+        <figcaption>Same engine binary for both models, thinking on, 600 tokens, temperature 0, three runs per prompt.</figcaption>
+      </figure>
+
+      <div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>IQ3_S in production</th><th class="num">Measured</th></tr></thead>
+            <tbody>
+              <tr><td>Reading a prompt (prefill)</td><td class="num">178–183 tok/s</td></tr>
+              <tr><td>Writing, 64k context</td><td class="num">50.4 tok/s</td></tr>
+              <tr><td>119,275-token prompt: needle found</td><td class="num">44.7 tok/s</td></tr>
+              <tr><td>Load time from the SSD</td><td class="num">251 s</td></tr>
+              <tr><td>Free memory left on the 3060</td><td class="num">~1 GB</td></tr>
+              <tr><td>10-minute soak, 84 requests</td><td class="num">no errors</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin-top:16px;font-size:16px">The new output stage reads its weights as 16-byte blocks instead of 2-byte pieces. On the M10 it went from 271 to 118 microseconds per layer, and its results are identical to the old kernel bit for bit.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:56px">Two models, one switch</h3>
+    <div class="two">
+      <div class="card">
+        <h3>IQ3_S: the default</h3>
+        <p>Highest-quality quantization of the model. 54.3 tok/s on coding prompts, 128k context, loads in about 4 minutes from the SSD. Used for real work.</p>
+      </div>
+      <div class="card">
+        <h3>IQ2_XS: the fast one</h3>
+        <p>2-bit quantization, about 10% faster: 60.3 tok/s on the same prompts. Kept on the hard disk and ready with one command; loads in about 11 minutes from there.</p>
+      </div>
+    </div>
+    <p style="margin-top:16px">Both models cannot sit in video memory at once (about 31 and 47 GB of experts against 76 GB in total), so switching means reloading.</p>
+  </section>
+
+  <section id="story">
+    <h2>How it got here</h2>
+    <p class="lead">Built by one person, on a used workstation, over two weeks of evenings and nights.</p>
+    <ol class="timeline">
+      <li>
+        <time datetime="2026-10-25">25 October</time>
+        <h3>A storm of PCIe errors</h3>
+        <p>The first M10 produced about 10,500 correctable errors per second. The cause was electromagnetic: the NVMe drive sat next to the card's unshielded riser. Moving the drive to slot 3 and forcing the M10 slots to Gen1 brought it to zero.</p>
+      </li>
+      <li>
+        <time datetime="2026-10-27">27 October</time>
+        <h3>A full backup, and a driver experiment</h3>
+        <p>The whole system was imaged to a hard disk before any risky change. A driver unlock was then tested: +2.5% on prompt reading, nothing on writing. It was removed.</p>
+      </li>
+      <li>
+        <time datetime="2026-11-05">5 November</time>
+        <h3>The second M10, and eight GPUs instead of four</h3>
+        <p>The engine accepted at most four M10 GPUs. Seven places in the code were changed to accept eight. IQ2_XS reached 68.7 tok/s in a real coding session.</p>
+      </li>
+      <li>
+        <time datetime="2026-11-06">6 November, night</time>
+        <h3>IQ3_S refuses to start</h3>
+        <p>The M10 kernels only understood 2-bit formats, and a safety check stopped the engine. The check is right: a format read with the wrong kernel gives plausible but wrong answers.</p>
+      </li>
+      <li class="hit">
+        <time datetime="2026-11-07">7 November</time>
+        <h3>New kernels, checked against the 3060</h3>
+        <p>Three input formats and a native output stage were written for the M10, each compared with the RTX 3060 to one part in 100,000 before use. IQ3_S loaded on all eight GPUs for the first time.</p>
+      </li>
+      <li class="hit">
+        <time datetime="2026-11-08">8 November</time>
+        <h3>The planar output stage, and production</h3>
+        <p>Profiling showed where the time went. The output stage was rewritten for the M10's memory and became 2.3 times faster. IQ3_S passed the 128k test and a 10-minute soak, and went into service.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="didnt-work">
+    <h2>What did not work</h2>
+    <p class="lead">Each idea below was tested, one change at a time, and the measurement said no.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>The idea</th><th>How it was tested</th><th>What the measurement said</th></tr></thead>
+        <tbody>
+          <tr><td>Power the M10 from the CPU's EPS connector</td><td>NVIDIA datasheet</td><td>It needs a PCIe 8-pin. The EPS cable can damage it.</td></tr>
+          <tr><td>The PCIe errors depend on temperature</td><td>Errors and temperatures, minute by minute</td><td>They changed at constant temperature.</td></tr>
+          <tr><td>The riser cable is faulty</td><td>Two different risers at Gen3</td><td>Same error curve with both.</td></tr>
+          <tr><td>Reading the PLE table slows prompts down</td><td>Two read modes compared</td><td>152 against 152 tok/s.</td></tr>
+          <tr><td>The driver unlock speeds things up a lot</td><td>Before and after, same tests</td><td>+2.5% prompt reading, 0 on writing.</td></tr>
+          <tr><td>Raising one limit is enough for eight GPUs</td><td>Search for every 4-element array</td><td>Seven code changes were needed.</td></tr>
+          <tr><td>The new M10 is defective</td><td>Each card alone, six identical prompts</td><td>Both gave the same answer to the bit.</td></tr>
+          <tr><td>IQ3_S runs on the M10 with a config change</td><td>First start, then the source code</td><td>The kernels did not exist. They had to be written.</td></tr>
+          <tr><td>Heavier experts make IQ3_S about 40% slower</td><td>Same prompt, same engine</td><td>−20% with the first kernel, −10% with the planar one.</td></tr>
+          <tr><td>The M10s are held back by their 30 W limit</td><td>Power and clocks sampled every second</td><td>They draw 21–23 W. Their clock cannot be changed with this driver.</td></tr>
+          <tr><td>A stronger 3060 means more speed</td><td>120 → 140 → 120 W</td><td>+5.5% clock, same tokens per second. The 3060 waits for the M10s.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="rebuild">
+    <h2>Rebuild it</h2>
+    <p class="lead">The outline is here. The exact commands, configuration and checks are in the <a href="https://github.com/BitMakerMan/Strata-maxwell/blob/iq3/docs/iq3/README.md">full guide</a>.</p>
+    <ol class="steps">
+      <li><div><h3>Hardware</h3><p>A workstation with three usable PCIe slots, PCIe 8-pin power for each M10, risers, and airflow: the M10 is passively cooled. Keep NVMe drives away from unshielded risers.</p></div></li>
+      <li><div><h3>BIOS</h3><p>Set the M10 slots to Gen1 explicitly; "Auto" is not enough. On the Z440, add <code>pci=realloc</code> to the kernel command line so both M10 switches get their memory windows.</p></div></li>
+      <li><div><h3>Host and driver</h3><p>Proxmox VE 9 with the kernel pinned, and NVIDIA driver 580.196.07, the last branch that supports Maxwell. Keep the installer file: you will need it again.</p></div></li>
+      <li><div><h3>Container and CUDA</h3><p>A privileged Debian 12 LXC with the NVIDIA devices passed through, and CUDA 12.9. CUDA 13 no longer supports the M10.</p></div></li>
+      <li><div><h3>Engine</h3><p>Build the <code>iq3</code> branch with a recent CMake (the 3.25 of Debian 12 cannot handle CUDA 12.9's C++20 dialect).</p></div></li>
+      <li><div><h3>Model</h3><p>Download and prepare Qwen3.8-Flash-Next IQ3_S with Strata's <code>setup.py</code>: about 84 GB of model files plus a 49 GB prepared pack.</p></div></li>
+      <li><div><h3>Configure and start</h3><p>Eight Maxwell devices, the CUDA order with the 3060 first, an expert cache of 988, 128k context. At start the log must show eight round-trip gates passed.</p></div></li>
+      <li><div><h3>Measure</h3><p>Use the bench tool with a fixed protocol and compare only runs made the same way, in the same session.</p></div></li>
+    </ol>
+  </section>
+
+  <section id="credits">
+    <h2>Credits</h2>
+    <div class="two">
+      <ul class="credits">
+        <li><a href="https://github.com/Niko1221/Strata">Strata</a>, by Niko1221 and contributors: the engine, the server, the whole architecture.</li>
+        <li><a href="https://github.com/nuke1984/Strata-maxwell">Strata-maxwell</a>, by nuke1984: the Maxwell tier this work extends, its first kernels and its safety checks.</li>
+        <li><a href="https://github.com/QwenLM">Qwen</a> team: the Qwen3.8-Flash-Next model.</li>
+        <li><a href="https://github.com/ISTA-DASLab">ISTA-DASLab</a>: the GSQ-RCO quantization and the IQ3_S files.</li>
+        <li><a href="https://github.com/ggml-org/llama.cpp">ggml / llama.cpp</a>: the quantization formats and the reference arithmetic the new kernels follow.</li>
+      </ul>
+      <div>
+        <p>This project did not invent the arithmetic; it moved it onto older hardware and measured every step. The mistakes are Craicek's, not theirs.</p>
+        <p>The code is MIT licensed, as upstream. Source, campaign log and every raw measurement: <a href="https://github.com/BitMakerMan/Strata-maxwell/tree/iq3">BitMakerMan/Strata-maxwell, branch iq3</a>.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <p><strong>AIDROGEN</strong>, built and measured by <a href="https://github.com/BitMakerMan">Craicek</a>.</p>
+      <p>Last measured on 8 November 2026.</p>
+    </div>
+    <div>
+      <p><a href="https://github.com/BitMakerMan/Strata-maxwell/tree/iq3">Source code</a></p>
+      <p><a href="https://github.com/BitMakerMan/Strata-maxwell/blob/iq3/docs/iq3/README.md">Full guide</a> · <a href="https://github.com/BitMakerMan/Strata-maxwell/blob/iq3/docs/iq3/LOG.md">Campaign log</a></p>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
